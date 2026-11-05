@@ -2,9 +2,9 @@ import { CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, Phone, ShieldCheck, UserR
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useAuth } from '../../app/providers/AuthProvider'
+import { preferencesForPreset, toAccessibilityPreferencesUpdate, type AccessibilityPreset } from '../../app/providers/AccessibilityProvider'
 import { DictationButton } from '../../components/assistive/DictationButton'
 import { Button, ButtonLink } from '../../components/ui/Button'
-import { DemoBanner } from '../../components/ui/DemoBanner'
 
 type AuthKind = 'login' | 'register' | 'recover' | 'reset'
 const content = {
@@ -31,6 +31,7 @@ export function AuthPage({ kind }: { kind: AuthKind }) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [registrationPreset, setRegistrationPreset] = useState<AccessibilityPreset>('standard')
   const firstError = useRef<HTMLInputElement>(null)
   const meta = content[kind]
   const sessionEnded = (location.state as { sessionEnded?: 'manual' | 'timeout' } | null)?.sessionEnded
@@ -53,7 +54,7 @@ export function AuthPage({ kind }: { kind: AuthKind }) {
     if ((kind === 'login' || kind === 'register' || kind === 'reset') && password.length < 8) next.password = 'Usa al menos 8 caracteres.'
     if (kind === 'register' && !firstName) next.firstName = 'Escribe tu nombre.'
     if (kind === 'register' && !lastName) next.lastName = 'Escribe tu apellido.'
-    if (kind === 'register' && !form.get('privacy')) next.privacy = 'Debes aceptar el borrador informativo de privacidad para crear la cuenta.'
+    if (kind === 'register' && !form.get('privacy')) next.privacy = 'Debes aceptar el aviso de privacidad para crear la cuenta.'
     setErrors(next); setFormError(null)
     if (Object.keys(next).length) { window.setTimeout(() => firstError.current?.focus(), 0); return }
 
@@ -65,7 +66,14 @@ export function AuthPage({ kind }: { kind: AuthKind }) {
         const requested = (location.state as { from?: string } | null)?.from
         navigate(requested?.startsWith('/paciente') ? requested : '/paciente', { replace: true })
       } else if (kind === 'register') {
-        const result = await auth.signUp({ email, password, firstName, lastName, phone: phone || null })
+        const result = await auth.signUp({
+          email,
+          password,
+          firstName,
+          lastName,
+          phone: phone || null,
+          accessibilityPreferences: toAccessibilityPreferencesUpdate(preferencesForPreset(registrationPreset)),
+        })
         navigate(result.status === 'authenticated' ? '/onboarding/accesibilidad' : '/confirmar-correo', { replace: true, state: result.status === 'confirmation-pending' ? { email } : undefined })
       } else if (kind === 'recover') {
         await auth.requestPasswordReset(email)
@@ -83,11 +91,11 @@ export function AuthPage({ kind }: { kind: AuthKind }) {
   }
 
   const needsPassword = kind === 'login' || kind === 'register' || kind === 'reset'
-  return <section className="auth-page section-pad"><div className="auth-visual"><div className="auth-sculpture"><div className="shield-plate"><ShieldCheck /></div><span className="orbit-dot orbit-dot--one" /><span className="orbit-dot orbit-dot--two" /></div><h2>Diseñado para acompañarte</h2><p>Controles grandes, lenguaje claro y una experiencia que respeta tus preferencias.</p><ul><li><CheckCircle2 /> Navegación completa con teclado</li><li><CheckCircle2 /> Movimiento configurable</li><li><CheckCircle2 /> Perfil y preferencias personales</li></ul></div><div className="auth-card"><DemoBanner /><span className="eyebrow">{meta.eyebrow}</span><h1>{meta.title}</h1><p>{kind === 'register' ? 'Tus datos crearán una cuenta Paciente en el entorno cloud de pruebas.' : 'Usa los datos de tu cuenta Paciente.'}</p>{sessionNotice ? <div className="notice notice--neutral" role="status">{sessionNotice}</div> : null}{formError ? <div className="notice notice--error" role="alert">{formError}</div> : null}<form onSubmit={(event) => void submit(event)} noValidate>
+  return <section className="auth-page section-pad"><div className="auth-visual"><div className="auth-sculpture"><div className="shield-plate"><ShieldCheck /></div><span className="orbit-dot orbit-dot--one" /><span className="orbit-dot orbit-dot--two" /></div><h2>Diseñado para acompañarte</h2><p>Controles grandes, lenguaje claro y una experiencia que respeta tus preferencias.</p><ul><li><CheckCircle2 /> Navegación completa con teclado</li><li><CheckCircle2 /> Movimiento configurable</li><li><CheckCircle2 /> Perfil y preferencias personales</li></ul></div><div className="auth-card"><span className="eyebrow">{meta.eyebrow}</span><h1>{meta.title}</h1><p>{kind === 'register' ? 'Tus datos crearán una cuenta Paciente en el entorno cloud de pruebas.' : 'Usa los datos de tu cuenta Paciente.'}</p>{sessionNotice ? <div className="notice notice--neutral" role="status">{sessionNotice}</div> : null}{formError ? <div className="notice notice--error" role="alert">{formError}</div> : null}<form onSubmit={(event) => void submit(event)} noValidate>
     {kind === 'register' ? <><div className="field-row"><Field ref={errors.firstName ? firstError : undefined} label="Nombre" name="firstName" icon={<UserRound />} error={errors.firstName} required autoComplete="given-name" /><Field ref={errors.lastName ? firstError : undefined} label="Apellido" name="lastName" icon={<UserRound />} error={errors.lastName} required autoComplete="family-name" /></div><Field label="Teléfono (opcional)" name="phone" type="tel" icon={<Phone />} autoComplete="tel" /></> : null}
     <Field ref={errors.email ? firstError : undefined} label="Correo" name="email" type="email" icon={<Mail />} error={errors.email} required autoComplete="email" />
     {needsPassword ? <div className="field"><label htmlFor="password">{kind === 'reset' ? 'Nueva contraseña' : 'Contraseña'}</label><div className="input-shell"><LockKeyhole aria-hidden="true" /><input ref={errors.password ? firstError : undefined} id="password" name="password" type={showPassword ? 'text' : 'password'} aria-invalid={!!errors.password} aria-describedby={errors.password ? 'password-error' : 'password-help'} autoComplete={kind === 'login' ? 'current-password' : 'new-password'} /><DictationButton label="contraseña" targetId="password" /><button type="button" className="input-action" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>{showPassword ? <EyeOff /> : <Eye />}</button></div><small id="password-help">Mínimo 8 caracteres. Evita decirla en voz alta si hay otras personas cerca.</small>{errors.password ? <span className="field-error" id="password-error">{errors.password}</span> : null}</div> : null}
-    {kind === 'register' ? <><label className="check-row"><input type="checkbox" name="privacy" /><span>Acepto el <Link to="/privacidad">borrador informativo de privacidad</Link>.</span></label>{errors.privacy ? <span className="field-error">{errors.privacy}</span> : null}</> : null}
+    {kind === 'register' ? <><div className="field"><label htmlFor="registration-preset">Perfil de accesibilidad inicial</label><select id="registration-preset" value={registrationPreset} onChange={(event) => setRegistrationPreset(event.target.value as AccessibilityPreset)}><option value="standard">Estándar</option><option value="low-vision">Baja visión</option><option value="reduced-mobility">Movilidad reducida</option><option value="colorblind">Daltonismo</option><option value="focus">Concentración</option><option value="older-adult">Adulto mayor</option></select><small>Podrás personalizar cada ajuste después de crear tu cuenta.</small></div><label className="check-row"><input type="checkbox" name="privacy" /><span>Acepto el <Link to="/privacidad">aviso de privacidad</Link>.</span></label>{errors.privacy ? <span className="field-error">{errors.privacy}</span> : null}</> : null}
     <Button type="submit" loading={busy} className="button--full">{meta.submit}</Button>
   </form>
   <div className="auth-links">{kind === 'login' ? <><Link to="/recuperar-contrasena">¿Olvidaste tu contraseña?</Link><span>¿Primera vez? <Link to="/registro">Crear una cuenta</Link></span><Link to="/acceso-demo">Ver otros roles demo</Link></> : <Link to="/login">Volver al ingreso</Link>}</div></div></section>

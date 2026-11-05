@@ -31,7 +31,8 @@ async function completeRegistration(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByRole('textbox', { name: /^apellido$/i }), 'Pérez')
   await user.type(screen.getByRole('textbox', { name: /^correo$/i }), 'ana@example.test')
   await user.type(screen.getByLabelText(/^contraseña$/i), 'segura123')
-  await user.click(screen.getByRole('checkbox', { name: /acepto el borrador/i }))
+  await user.selectOptions(screen.getByLabelText(/perfil de accesibilidad inicial/i), 'low-vision')
+  await user.click(screen.getByRole('checkbox', { name: /acepto el aviso/i }))
   await user.click(screen.getByRole('button', { name: /^crear cuenta$/i }))
 }
 
@@ -60,6 +61,10 @@ describe('continuación del registro Paciente', () => {
     await completeRegistration(user)
 
     expect(await screen.findByRole('heading', { name: /onboarding de accesibilidad/i })).toBeInTheDocument()
+    expect(accountAdapter.signUp).toHaveBeenCalledWith(expect.objectContaining({ accessibilityPreferences: {
+      preset: 'low-vision', font_scale: 1.25, high_contrast: true, large_cursor: true, magnifier_enabled: true,
+      reduced_motion: false, simple_mode: false, guided_reading: false, colorblind_mode: false,
+    } }))
     expect(accountAdapter.loadAccount).toHaveBeenCalledTimes(1)
     expect(accountAdapter.signOut).not.toHaveBeenCalled()
   })

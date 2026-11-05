@@ -16,7 +16,15 @@ export function Magnifier({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     const lens = lensRef.current
     const text = textRef.current
-    if (!enabled || !lens || !text) return
+    if (!lens || !text) return
+
+    const reset = () => {
+      lens.hidden = true
+      lens.removeAttribute('style')
+      text.textContent = ''
+    }
+    reset()
+    if (!enabled) return
 
     let frame: number | null = null
     let x = 0
@@ -55,6 +63,8 @@ export function Magnifier({ enabled }: { enabled: boolean }) {
       document.removeEventListener('focusin', onFocus)
       document.removeEventListener('pointerleave', hide)
       if (frame !== null) window.cancelAnimationFrame(frame)
+      content = ''
+      reset()
     }
   }, [enabled])
 

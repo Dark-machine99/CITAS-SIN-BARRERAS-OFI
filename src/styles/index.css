@@ -415,6 +415,9 @@ html[data-contrast='high'] .button--ghost:hover { background: #222 !important; }
 html[data-contrast='high'] .toggle i { background: #555; border: 1px solid #fff; }
 html[data-contrast='high'] .toggle input:checked + i::after { background: #000; }
 html[data-contrast='high'] :where(.notice--neutral,.confirmation-box,.body-selector__trigger,.appointment-card__date,.specialty-art,.doctor-avatar,.preset-card.selected,.choice-card.selected,.region-grid label.selected) { color: #fff !important; background: #171717 !important; border-color: #fff !important; }
+html[data-contrast='high'] .confirmation-box { border-width: 2px; }
+html[data-contrast='high'] .confirmation-box > svg { color: #ffe600 !important; }
+html[data-contrast='high'] .confirmation-box :where(h2,p,strong) { color: #fff !important; }
 html[data-contrast='high'] :where(.notice--error,.notice--warning,.notice--success,.status) { border: 2px solid currentColor; }
 html[data-contrast='high'] .assistive-trigger { color: #000; background: #ffe600; border-color: #fff; }
 html[data-contrast='high'] .accessibility-companion__head, html[data-contrast='high'] .accessibility-companion__body { color: #000; background: #ffe600; border-color: #fff; }

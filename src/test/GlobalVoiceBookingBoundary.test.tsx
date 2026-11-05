@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,7 +8,7 @@ import { DemoSessionProvider } from '../app/providers/DemoSessionProvider'
 import { BookingPage } from '../features/booking/BookingPage'
 import { VoiceAssistant } from '../features/voice/VoiceAssistant'
 import type { RecognitionEventLike, RecognitionLike } from '../features/voice/speechRecognition'
-import type { PatientAvailabilityAdapter } from '../services/supabase/patientAvailabilityAdapter'
+import type { PatientAvailabilityAdapter, PatientAvailabilityData } from '../services/supabase/patientAvailabilityAdapter'
 import type { PatientDirectoryAdapter, PatientDirectoryData } from '../services/supabase/patientDirectoryAdapter'
 import type { PatientReservationAdapter, PatientReservationData, PatientReservationInput } from '../services/supabase/patientReservationAdapter'
 
@@ -104,10 +104,24 @@ class FakeRecognition implements RecognitionLike {
   stop() { this.onend?.() }
 }
 
+class DeferredRecognition implements RecognitionLike {
+  static instance: DeferredRecognition | null = null
+  lang = ''
+  continuous = false
+  interimResults = false
+  onresult: ((event: RecognitionEventLike) => void) | null = null
+  onerror: (() => void) | null = null
+  onend: (() => void) | null = null
+  start() { DeferredRecognition.instance = this }
+  stop() { this.onend?.() }
+  emit(transcript: string) { this.onresult?.({ results: { 0: { 0: { transcript } } } }) }
+}
+
 afterEach(() => {
   cleanup()
   delete window.SpeechRecognition
   FakeRecognition.transcript = command
+  DeferredRecognition.instance = null
 })
 
 describe('límite de reserva del asistente global', () => {
@@ -167,6 +181,73 @@ describe('límite de reserva del asistente global', () => {
     await user.click(screen.getByRole('button', { name: /ejecutar comando/i }))
     await waitFor(() => expect(within(voiceStatus()).getByText(/primero prepara una propuesta completa/i)).toBeInTheDocument())
     expect(reserve).toHaveBeenCalledTimes(1)
+  })
+
+  it('descarta la confirmación pendiente cuando la persona cancela por voz', async () => {
+    const user = userEvent.setup()
+    const cloud = adapters()
+    const reserve = vi.fn()
+    renderAssistant({ ...cloud, reservationAdapter: { reserve } })
+
+    await openAndWrite(user, command)
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/paciente/reservar?voice=review'))
+    await user.type(screen.getByRole('textbox', { name: /comando escrito/i }), 'cancelar reserva')
+    await user.click(screen.getByRole('button', { name: /ejecutar comando/i }))
+    await user.type(screen.getByRole('textbox', { name: /comando escrito/i }), 'confirmar cita')
+    await user.click(screen.getByRole('button', { name: /ejecutar comando/i }))
+
+    await waitFor(() => expect(within(voiceStatus()).getByText(/primero prepara una propuesta completa/i)).toBeInTheDocument())
+    expect(reserve).not.toHaveBeenCalled()
+  })
+
+  it('invalida una resolución diferida cuando la persona cancela la solicitud', async () => {
+    let resolveAvailability!: (data: PatientAvailabilityData) => void
+    const pendingAvailability = new Promise<PatientAvailabilityData>((resolve) => { resolveAvailability = resolve })
+    const directoryAdapter: PatientDirectoryAdapter = { load: vi.fn().mockResolvedValue(directoryData) }
+    const availabilityAdapter: PatientAvailabilityAdapter = { load: vi.fn().mockReturnValue(pendingAvailability) }
+    const reserve = vi.fn()
+    const user = userEvent.setup()
+    renderAssistant({ directoryAdapter, availabilityAdapter, reservationAdapter: { reserve } })
+
+    await openAndWrite(user, command)
+    await waitFor(() => expect(availabilityAdapter.load).toHaveBeenCalledTimes(1))
+
+    const input = screen.getByRole('textbox', { name: /comando escrito/i })
+    await user.clear(input)
+    await user.type(input, 'cancelar reserva')
+    fireEvent.submit(input.closest('form')!)
+    await waitFor(() => expect(within(voiceStatus()).getByText(/no cancelé ninguna cita ni reserva/i)).toBeInTheDocument())
+
+    const requestedDate = vi.mocked(availabilityAdapter.load).mock.calls[0]?.[0].date
+    expect(requestedDate).toBeDefined()
+    await act(async () => {
+      resolveAvailability({ doctorId, specialtyId, date: requestedDate!, timeZone: 'America/Lima', slots: [{ time: '09:30:00', durationMinutes: 45 }] })
+      await pendingAvailability
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/paciente')
+    expect(screen.getByTestId('draft')).toHaveTextContent('"specialtyId":null')
+    expect(screen.getByTestId('draft')).toHaveTextContent('"doctorId":null')
+    expect(screen.queryByText(/propuesta está lista para revisión/i)).not.toBeInTheDocument()
+    expect(reserve).not.toHaveBeenCalled()
+  })
+
+  it('anula callbacks y transcripción al cerrar durante el reconocimiento', async () => {
+    window.SpeechRecognition = DeferredRecognition
+    const user = userEvent.setup()
+    const cloud = adapters()
+    renderAssistant({ ...cloud, reservationAdapter: { reserve: vi.fn() } })
+
+    await user.click(screen.getByRole('button', { name: /abrir asistente por voz/i }))
+    await user.click(screen.getByRole('button', { name: /^hablar$/i }))
+    expect(screen.getByText('Escuchando…')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^cerrar asistente$/i }))
+    DeferredRecognition.instance?.emit(command)
+
+    expect(screen.queryByRole('dialog', { name: /asistente de voz/i })).not.toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/paciente')
+    expect(cloud.directoryAdapter.load).not.toHaveBeenCalled()
   })
 
   it('mantiene la propuesta incompleta ante ambigüedad y no reserva', async () => {

@@ -49,6 +49,12 @@ describe('Accesibilidad autenticada del Paciente', () => {
     expect(textRule).toContain('color: #fff !important')
   })
 
+  it('mantiene legible el resumen final de reserva en alto contraste', () => {
+    expect(styles).toContain("html[data-contrast='high'] .confirmation-box { border-width: 2px; }")
+    expect(styles).toContain("html[data-contrast='high'] .confirmation-box > svg { color: #ffe600 !important; }")
+    expect(styles).toContain("html[data-contrast='high'] .confirmation-box :where(h2,p,strong) { color: #fff !important; }")
+  })
+
   it('renderiza la ruta dentro del shell Paciente y sin el aviso de piloto', async () => {
     renderApp('/paciente/accesibilidad')
 

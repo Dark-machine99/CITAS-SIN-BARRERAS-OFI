@@ -80,6 +80,10 @@ export function parseVoiceCommand(raw: string, role: DemoRole = 'patient'): Voic
     if (roleRoute) return { type: 'navigate', path: roleRoute.path, label: roleRoute.label }
   }
 
+  if (role === 'patient' && /^(?:ir a |abrir )?(?:reservar|reservar una cita|nueva cita|pedir cita)$/.test(command)) {
+    return { type: 'navigate', path: '/paciente/reservar', label: 'Reservar' }
+  }
+
   const reasonMatch = raw.trim().match(/\bmotivo\s+(.+)/i)
   if (reasonMatch?.[1]) return { type: 'reason', reason: reasonMatch[1].trim().slice(0, 280) }
 

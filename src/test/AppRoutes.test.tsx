@@ -11,17 +11,20 @@ function renderRoute(route: string) {
 afterEach(cleanup)
 
 describe('rutas principales', () => {
-  const cases = [
-    ['/', /tu salud merece/i], ['/login', /entra a tu espacio demo/i], ['/registro', /conoce el registro guiado/i],
-    ['/recuperar-contrasena', /simula el envío/i], ['/nueva-contrasena', /prueba la validación/i],
-    ['/confirmar-correo', /confirmación por correo/i], ['/privacidad', /borrador informativo/i], ['/accesibilidad', /^accesibilidad$/i],
-    ['/onboarding/accesibilidad', /configura la experiencia/i], ['/paciente', /tu cuidado/i], ['/paciente/reservar', /especialidad/i],
-    ['/paciente/citas', /mis citas/i], ['/paciente/citas/demo-1', /cardiología/i], ['/paciente/medicos', /directorio médico/i],
-    ['/paciente/especialidades', /^especialidades$/i], ['/paciente/perfil', /mi perfil/i], ['/acceso-denegado', /acceso no disponible/i], ['/ruta-inexistente', /no encontramos/i],
+  const publicCases = [
+    ['/', /tu salud merece/i], ['/login', /entra a tu espacio personal/i], ['/registro', /crea tu cuenta guiada/i],
+    ['/recuperar-contrasena', /recibe instrucciones seguras/i], ['/nueva-contrasena', /protege nuevamente tu cuenta/i],
+    ['/confirmar-correo', /confirma tu cuenta antes de ingresar/i], ['/privacidad', /aviso de privacidad/i], ['/accesibilidad', /^accesibilidad$/i],
+    ['/onboarding/accesibilidad', /configura la experiencia/i], ['/acceso-denegado', /acceso no disponible/i], ['/ruta-inexistente', /no encontramos/i],
   ] as const
 
-  it.each(cases)('renderiza %s', (route, heading) => {
+  it.each(publicCases)('renderiza %s', async (route, heading) => {
     renderRoute(route)
-    expect(screen.getByRole('heading', { level: 1, name: heading })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument()
+  })
+
+  it.each(['/paciente', '/paciente/reservar', '/paciente/citas', '/paciente/citas/demo-1', '/paciente/medicos', '/paciente/especialidades', '/paciente/perfil'])('protege %s sin sesión', async (route) => {
+    renderRoute(route)
+    expect(await screen.findByRole('heading', { level: 1, name: /entra a tu espacio personal/i })).toBeInTheDocument()
   })
 })

@@ -5,7 +5,6 @@ import { useDemoSession } from '../../app/providers/DemoSessionProvider'
 import type { DemoRole } from '../../types/medicalAdmin'
 import { Brand } from '../ui/Brand'
 import { Button } from '../ui/Button'
-import { DemoBanner } from '../ui/DemoBanner'
 
 const doctorLinks = [
   ['/medico', 'Mi agenda', CalendarDays],
@@ -46,7 +45,6 @@ export function RoleLayout({ appRole: role }: { appRole: Extract<DemoRole, 'doct
     </aside>
     <div className="patient-main">
       <header className="patient-topbar role-topbar"><Button variant="ghost" className="icon-button menu-button" onClick={() => setMenuOpen(true)} aria-label="Abrir menú"><Menu /></Button><div><span className="eyebrow">{roleName} · entorno de demostración</span><strong>{role === 'doctor' ? 'Dra. Lucía Rivera Demo' : 'Panel de coordinación'}</strong></div><span className="avatar" aria-hidden="true">{role === 'doctor' ? 'LR' : 'AD'}</span></header>
-      <DemoBanner compact />
       <main id="contenido" tabIndex={-1} className="patient-content role-content"><Outlet /></main>
       <nav className="bottom-nav role-bottom-nav" aria-label={`Navegación móvil de ${roleName}`}>{links.slice(0, 4).map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === `/${role === 'doctor' ? 'medico' : 'administracion'}`}><Icon aria-hidden="true" /><span>{label}</span></NavLink>)}</nav>
     </div>

@@ -53,7 +53,10 @@ function SignUpHarness() {
   const [result, setResult] = useState('idle')
   const signUp = async () => {
     try {
-      const nextResult = await auth.signUp({ email: 'ana@example.test', password: 'segura123', firstName: 'Ana', lastName: 'Pérez', phone: null })
+      const nextResult = await auth.signUp({ email: 'ana@example.test', password: 'segura123', firstName: 'Ana', lastName: 'Pérez', phone: null, accessibilityPreferences: {
+        preset: 'low-vision', font_scale: 1.25, high_contrast: true, large_cursor: true, magnifier_enabled: true,
+        reduced_motion: false, simple_mode: false, guided_reading: false, colorblind_mode: false,
+      } })
       setResult(nextResult.status)
     } catch { setResult('error') }
   }
@@ -81,6 +84,10 @@ describe('cuenta Paciente cloud', () => {
     await user.click(screen.getByRole('button', { name: 'activar simple' }))
     await user.click(screen.getByRole('button', { name: 'guardar preferencias' }))
     await waitFor(() => expect(accountAdapter.updatePreferences).toHaveBeenCalledWith('patient-1', expect.objectContaining({ simple_mode: true })))
+    const persistedUpdate = vi.mocked(accountAdapter.updatePreferences).mock.calls[0]?.[1]
+    expect(persistedUpdate).toBeDefined()
+    expect(persistedUpdate).not.toHaveProperty('keyboard_enhancements')
+    expect(persistedUpdate).not.toHaveProperty('voice_control')
   })
 
   it('mantiene el registro pendiente cuando Supabase no devuelve sesión', async () => {
@@ -88,7 +95,13 @@ describe('cuenta Paciente cloud', () => {
     const user = userEvent.setup()
     render(<AuthProvider adapter={accountAdapter}><SignUpHarness /></AuthProvider>)
     await user.click(screen.getByRole('button', { name: 'registrar' }))
-    await waitFor(() => expect(accountAdapter.signUp).toHaveBeenCalledWith(expect.objectContaining({ firstName: 'Ana', lastName: 'Pérez', phone: null })))
+    await waitFor(() => expect(accountAdapter.signUp).toHaveBeenCalledWith(expect.objectContaining({
+      firstName: 'Ana', lastName: 'Pérez', phone: null,
+      accessibilityPreferences: {
+        preset: 'low-vision', font_scale: 1.25, high_contrast: true, large_cursor: true, magnifier_enabled: true,
+        reduced_motion: false, simple_mode: false, guided_reading: false, colorblind_mode: false,
+      },
+    })))
     expect(screen.getByTestId('sign-up-result')).toHaveTextContent('confirmation-pending')
     expect(screen.getByTestId('sign-up-status')).toHaveTextContent('signed-out')
     expect(accountAdapter.loadAccount).not.toHaveBeenCalled()

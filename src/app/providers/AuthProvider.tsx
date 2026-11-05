@@ -11,7 +11,7 @@ interface AuthContextValue {
   profile: PatientProfile | null
   storedPreferences: AccessibilityPreferencesRow | null
   error: string | null
-  signUp: (input: { email: string; password: string; firstName: string; lastName: string; phone: string | null }) => Promise<SignUpResult>
+  signUp: (input: { email: string; password: string; firstName: string; lastName: string; phone: string | null; accessibilityPreferences: AccessibilityPreferencesUpdate }) => Promise<SignUpResult>
   signIn: (email: string, password: string) => Promise<PatientProfile>
   signOut: () => Promise<void>
   requestPasswordReset: (email: string) => Promise<void>
@@ -85,7 +85,7 @@ export function AuthProvider({ children, adapter = patientAccountAdapter }: Prop
     return () => { active = false; loadVersion.current += 1; unsubscribe() }
   }, [adapter, hydrate])
 
-  const signUp = useCallback(async (input: { email: string; password: string; firstName: string; lastName: string; phone: string | null }) => {
+  const signUp = useCallback(async (input: { email: string; password: string; firstName: string; lastName: string; phone: string | null; accessibilityPreferences: AccessibilityPreferencesUpdate }) => {
     const returnedSession = await adapter.signUp({ ...input, redirectTo: `${window.location.origin}/confirmar-correo` })
     if (!returnedSession) return { status: 'confirmation-pending' } as const
     const nextAccount = await hydrate(returnedSession)

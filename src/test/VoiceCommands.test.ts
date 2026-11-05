@@ -19,8 +19,8 @@ describe('comandos de voz locales', () => {
   })
 
   it('dirige navegación breve a Reservar y mantiene Accesibilidad dentro de Paciente', () => {
-    expect(parseVoiceCommand('reservar una cita')).toEqual({ type: 'booking', request: 'reservar una cita' })
-    expect(parseVoiceCommand('ir a reservar')).toEqual({ type: 'booking', request: 'ir a reservar' })
+    expect(parseVoiceCommand('reservar una cita')).toEqual({ type: 'navigate', path: '/paciente/reservar', label: 'Reservar' })
+    expect(parseVoiceCommand('ir a reservar')).toEqual({ type: 'navigate', path: '/paciente/reservar', label: 'Reservar' })
     expect(parseVoiceCommand('abrir accesibilidad')).toEqual({ type: 'navigate', path: '/paciente/accesibilidad', label: 'Accesibilidad' })
   })
 

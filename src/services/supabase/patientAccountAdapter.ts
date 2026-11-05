@@ -15,7 +15,7 @@ export interface PatientAccount {
 export interface PatientAccountAdapter {
   getSession: () => Promise<Session | null>
   onAuthStateChange: (listener: (event: AuthChangeEvent, session: Session | null) => void) => () => void
-  signUp: (input: { email: string; password: string; firstName: string; lastName: string; phone: string | null; redirectTo: string }) => Promise<Session | null>
+  signUp: (input: { email: string; password: string; firstName: string; lastName: string; phone: string | null; accessibilityPreferences: AccessibilityPreferencesUpdate; redirectTo: string }) => Promise<Session | null>
   signIn: (email: string, password: string) => Promise<Session>
   signOut: () => Promise<void>
   requestPasswordReset: (email: string, redirectTo: string) => Promise<void>
@@ -39,13 +39,18 @@ export const patientAccountAdapter: PatientAccountAdapter = {
     const { data } = supabase.auth.onAuthStateChange(listener)
     return () => data.subscription.unsubscribe()
   },
-  async signUp({ email, password, firstName, lastName, phone, redirectTo }) {
+  async signUp({ email, password, firstName, lastName, phone, accessibilityPreferences, redirectTo }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectTo,
-        data: { first_name: firstName, last_name: lastName, phone },
+        data: {
+          first_name: firstName,
+          last_name: lastName,
+          phone,
+          accessibility_preferences: accessibilityPreferences,
+        },
       },
     })
     throwIfError(error)

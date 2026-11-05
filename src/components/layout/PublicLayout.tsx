@@ -15,6 +15,6 @@ export function PublicLayout() {
       </nav>
     </header>
     <main id="contenido" tabIndex={-1}><Outlet /></main>
-    <footer className="public-footer"><Brand /><p>Piloto Paciente con cuenta cloud de pruebas. Las operaciones médicas aún son simuladas.</p><nav aria-label="Enlaces de pie"><Link to="/privacidad">Privacidad</Link><Link to="/accesibilidad">Accesibilidad</Link></nav></footer>
+    <footer className="public-footer"><Brand /><p>Proyecto académico conectado a un entorno Supabase cloud de pruebas. Utiliza únicamente datos ficticios.</p><nav aria-label="Enlaces de pie"><Link to="/privacidad">Aviso de privacidad</Link><Link to="/accesibilidad">Accesibilidad</Link></nav></footer>
   </div>
 }

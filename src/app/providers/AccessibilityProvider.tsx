@@ -17,15 +17,33 @@ export interface AccessibilityPreferences {
   colorReinforcement: boolean
 }
 
-const defaults: AccessibilityPreferences = { preset: 'standard', textScale: 'normal', highContrast: false, largeCursor: false, reducedMotion: false, simpleMode: false, magnifier: false, readingGuide: false, colorReinforcement: false }
-const presets: Record<AccessibilityPreset, Partial<AccessibilityPreferences>> = {
-  standard: defaults,
+export const defaultAccessibilityPreferences: AccessibilityPreferences = { preset: 'standard', textScale: 'normal', highContrast: false, largeCursor: false, reducedMotion: false, simpleMode: false, magnifier: false, readingGuide: false, colorReinforcement: false }
+export const accessibilityPresets: Record<AccessibilityPreset, Partial<AccessibilityPreferences>> = {
+  standard: defaultAccessibilityPreferences,
   'low-vision': { textScale: 'large', highContrast: true, largeCursor: true, magnifier: true },
   'reduced-mobility': { largeCursor: true, reducedMotion: true, simpleMode: true },
   colorblind: { colorReinforcement: true },
   focus: { simpleMode: true, reducedMotion: true, readingGuide: true },
   'older-adult': { textScale: 'large', largeCursor: true, simpleMode: true },
   custom: {},
+}
+
+export function preferencesForPreset(preset: AccessibilityPreset): AccessibilityPreferences {
+  return { ...defaultAccessibilityPreferences, ...accessibilityPresets[preset], preset }
+}
+
+export function toAccessibilityPreferencesUpdate(preferences: AccessibilityPreferences): AccessibilityPreferencesUpdate {
+  return {
+    preset: preferences.preset,
+    font_scale: preferences.textScale === 'large' ? 1.25 : preferences.textScale === 'small' ? .875 : 1,
+    high_contrast: preferences.highContrast,
+    large_cursor: preferences.largeCursor,
+    reduced_motion: preferences.reducedMotion,
+    simple_mode: preferences.simpleMode,
+    magnifier_enabled: preferences.magnifier,
+    guided_reading: preferences.readingGuide,
+    colorblind_mode: preferences.colorReinforcement,
+  }
 }
 
 interface AccessibilityContextValue {
@@ -43,7 +61,7 @@ const AccessibilityContext = createContext<AccessibilityContextValue | null>(nul
 
 export function AccessibilityProvider({ children }: PropsWithChildren) {
   const auth = useOptionalAuth()
-  const [preferences, setPreferences] = useState(defaults)
+  const [preferences, setPreferences] = useState(defaultAccessibilityPreferences)
   const [systemReducedMotion, setSystemReducedMotion] = useState(false)
   const [persistence, setPersistence] = useState<AccessibilityContextValue['persistence']>('local')
   const [persistenceError, setPersistenceError] = useState<string | null>(null)
@@ -51,21 +69,24 @@ export function AccessibilityProvider({ children }: PropsWithChildren) {
   useLayoutEffect(() => {
     if (!auth?.storedPreferences) return
     const stored = auth.storedPreferences
-    const preset = Object.hasOwn(presets, stored.preset) ? stored.preset as AccessibilityPreset : 'custom'
+    const preset = Object.hasOwn(accessibilityPresets, stored.preset) ? stored.preset as AccessibilityPreset : 'custom'
     const textScale: TextScale = stored.font_scale >= 1.2 ? 'large' : stored.font_scale < 1 ? 'small' : 'normal'
-    setPreferences({
-      preset,
-      textScale,
-      highContrast: stored.high_contrast,
-      largeCursor: stored.large_cursor,
-      reducedMotion: stored.reduced_motion,
-      simpleMode: stored.simple_mode,
-      magnifier: stored.magnifier_enabled,
-      readingGuide: stored.guided_reading,
-      colorReinforcement: stored.colorblind_mode,
-    })
-    setPersistence('saved')
-    setPersistenceError(null)
+    const timer = window.setTimeout(() => {
+      setPreferences({
+        preset,
+        textScale,
+        highContrast: stored.high_contrast,
+        largeCursor: stored.large_cursor,
+        reducedMotion: stored.reduced_motion,
+        simpleMode: stored.simple_mode,
+        magnifier: stored.magnifier_enabled,
+        readingGuide: stored.guided_reading,
+        colorReinforcement: stored.colorblind_mode,
+      })
+      setPersistence('saved')
+      setPersistenceError(null)
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [auth?.storedPreferences])
 
   useEffect(() => {
@@ -90,23 +111,18 @@ export function AccessibilityProvider({ children }: PropsWithChildren) {
     setPersistence('local')
   }, [])
   const applyPreset = useCallback((preset: AccessibilityPreset) => {
-    setPreferences({ ...defaults, ...presets[preset], preset })
+    setPreferences(preferencesForPreset(preset))
     setPersistence('local')
   }, [])
   const save = useCallback(async () => {
-    if (!auth?.session) { setPersistence('local'); return }
-    setPersistence('saving'); setPersistenceError(null)
-    const update: AccessibilityPreferencesUpdate = {
-      preset: preferences.preset,
-      font_scale: preferences.textScale === 'large' ? 1.25 : preferences.textScale === 'small' ? .875 : 1,
-      high_contrast: preferences.highContrast,
-      large_cursor: preferences.largeCursor,
-      reduced_motion: preferences.reducedMotion,
-      simple_mode: preferences.simpleMode,
-      magnifier_enabled: preferences.magnifier,
-      guided_reading: preferences.readingGuide,
-      colorblind_mode: preferences.colorReinforcement,
+    if (!auth?.session) {
+      const message = 'Debes iniciar sesión para guardar estas preferencias en tu cuenta.'
+      setPersistenceError(message)
+      setPersistence('error')
+      throw new Error(message)
     }
+    setPersistence('saving'); setPersistenceError(null)
+    const update = toAccessibilityPreferencesUpdate(preferences)
     try { await auth.updateStoredPreferences(update); setPersistence('saved') }
     catch (nextError) { setPersistenceError(nextError instanceof Error ? nextError.message : 'No se pudieron guardar las preferencias.'); setPersistence('error'); throw nextError }
   }, [auth, preferences])
