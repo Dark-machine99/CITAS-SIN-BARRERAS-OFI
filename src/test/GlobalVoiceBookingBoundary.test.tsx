@@ -1,10 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, useLocation } from 'react-router'
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccessibilityProvider } from '../app/providers/AccessibilityProvider'
 import { BookingProvider, useBooking } from '../app/providers/BookingProvider'
-import { DemoSessionProvider } from '../app/providers/DemoSessionProvider'
+import { DemoSessionProvider, useDemoSession } from '../app/providers/DemoSessionProvider'
 import { BookingPage } from '../features/booking/BookingPage'
 import { VoiceAssistant } from '../features/voice/VoiceAssistant'
 import type { RecognitionEventLike, RecognitionLike } from '../features/voice/speechRecognition'
@@ -56,16 +56,22 @@ function StateProbe() {
   return <><output data-testid="draft">{JSON.stringify(draft)}</output><output data-testid="location">{`${location.pathname}${location.search}`}</output></>
 }
 
+function DemoAdminResidueControl() {
+  const { enterDemo } = useDemoSession()
+  return <button type="button" onClick={() => enterDemo('admin')}>Conservar rol admin residual</button>
+}
+
 function renderAssistant({
   directoryAdapter,
   availabilityAdapter,
   reservationAdapter,
-}: ReturnType<typeof adapters> & { reservationAdapter: PatientReservationAdapter }) {
+}: ReturnType<typeof adapters> & { reservationAdapter: PatientReservationAdapter }, initialEntry = '/paciente', withDemoControl = false) {
   return render(
-    <MemoryRouter initialEntries={['/paciente']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <DemoSessionProvider>
         <AccessibilityProvider>
           <BookingProvider reservationAdapter={reservationAdapter}>
+            {withDemoControl ? <DemoAdminResidueControl /> : null}
             <VoiceAssistant directoryAdapter={directoryAdapter} availabilityAdapter={availabilityAdapter} />
             <StateProbe />
           </BookingProvider>
@@ -78,6 +84,13 @@ function renderAssistant({
 async function openAndWrite(user: ReturnType<typeof userEvent.setup>, value: string) {
   await user.click(screen.getByRole('button', { name: /abrir asistente por voz/i }))
   await user.type(screen.getByRole('textbox', { name: /comando escrito/i }), value)
+  await user.click(screen.getByRole('button', { name: /ejecutar comando/i }))
+}
+
+async function writeNextCommand(user: ReturnType<typeof userEvent.setup>, value: string) {
+  const input = screen.getByRole('textbox', { name: /comando escrito/i })
+  await user.clear(input)
+  await user.type(input, value)
   await user.click(screen.getByRole('button', { name: /ejecutar comando/i }))
 }
 
@@ -125,6 +138,40 @@ afterEach(() => {
 })
 
 describe('límite de reserva del asistente global', () => {
+  it('mantiene la navegación Paciente aunque exista un rol admin demo residual', async () => {
+    const user = userEvent.setup()
+    const cloud = adapters()
+    renderAssistant({ ...cloud, reservationAdapter: { reserve: vi.fn() } }, '/paciente', true)
+
+    await user.click(screen.getByRole('button', { name: /conservar rol admin residual/i }))
+    await openAndWrite(user, 'ir a mis citas')
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/paciente/citas'))
+
+    for (const [spoken, path] of [
+      ['abrir médicos', '/paciente/medicos'],
+      ['especialidades', '/paciente/especialidades'],
+      ['inicio', '/paciente'],
+      ['reservar una cita', '/paciente/reservar'],
+    ] as const) {
+      await writeNextCommand(user, spoken)
+      await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(path))
+      expect(screen.getByTestId('location')).not.toHaveTextContent('/administracion')
+    }
+  })
+
+  it.each([
+    ['/administracion', 'abrir usuarios', '/administracion/usuarios'],
+    ['/medico/citas/demo-1', 'abrir agenda', '/medico'],
+  ] as const)('deriva la voz de la superficie %s', async (initialEntry, spoken, expectedPath) => {
+    const user = userEvent.setup()
+    const cloud = adapters()
+    renderAssistant({ ...cloud, reservationAdapter: { reserve: vi.fn() } }, initialEntry)
+
+    await openAndWrite(user, spoken)
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(expectedPath))
+  })
+
   it('navega con una orden escrita breve sin consultar el resolvedor cloud', async () => {
     const user = userEvent.setup()
     const cloud = adapters()
@@ -135,6 +182,30 @@ describe('límite de reserva del asistente global', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/paciente/reservar'))
     expect(within(voiceStatus()).getByText(/abriendo Reservar/i)).toBeInTheDocument()
     expect(cloud.directoryAdapter.load).not.toHaveBeenCalled()
+    expect(cloud.availabilityAdapter.load).not.toHaveBeenCalled()
+  })
+
+  it('abre la reserva manual en el primer paso con una orden breve', async () => {
+    const user = userEvent.setup()
+    const cloud = adapters()
+    render(
+      <MemoryRouter initialEntries={['/paciente']}>
+        <DemoSessionProvider><AccessibilityProvider><BookingProvider reservationAdapter={{ reserve: vi.fn() }}>
+          <Routes>
+            <Route path="/paciente" element={<VoiceAssistant directoryAdapter={cloud.directoryAdapter} availabilityAdapter={cloud.availabilityAdapter} />} />
+            <Route path="/paciente/reservar" element={<><BookingPage directoryAdapter={cloud.directoryAdapter} availabilityAdapter={cloud.availabilityAdapter} /><StateProbe /></>} />
+          </Routes>
+        </BookingProvider></AccessibilityProvider></DemoSessionProvider>
+      </MemoryRouter>,
+    )
+
+    await openAndWrite(user, 'reservar una cita')
+
+    expect(await screen.findByRole('heading', { level: 1, name: /^especialidad$/i })).toBeInTheDocument()
+    expect(screen.getByText(/paso 1 de 7/i)).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/paciente/reservar')
+    expect(screen.getByTestId('location')).not.toHaveTextContent('voice=review')
+    expect(cloud.directoryAdapter.load).toHaveBeenCalledTimes(1)
     expect(cloud.availabilityAdapter.load).not.toHaveBeenCalled()
   })
 
@@ -299,6 +370,7 @@ describe('límite de reserva del asistente global', () => {
             <BookingProvider reservationAdapter={{ reserve }}>
               <VoiceAssistant directoryAdapter={cloud.directoryAdapter} availabilityAdapter={cloud.availabilityAdapter} />
               <BookingPage directoryAdapter={cloud.directoryAdapter} availabilityAdapter={cloud.availabilityAdapter} />
+              <Link to="/paciente/reservar">Reservar manualmente</Link>
               <StateProbe />
             </BookingProvider>
           </AccessibilityProvider>
@@ -310,6 +382,19 @@ describe('límite de reserva del asistente global', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: /resumen/i })).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('/paciente/reservar?voice=review')
+    expect(reserve).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('link', { name: /reservar manualmente/i }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: /^especialidad$/i })).toBeInTheDocument()
+    expect(screen.getByText(/paso 1 de 7/i)).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/paciente/reservar')
+    expect(screen.getByTestId('location')).not.toHaveTextContent('voice=review')
+    expect(screen.getByTestId('draft')).toHaveTextContent(`"specialtyId":"${specialtyId}"`)
+    expect(screen.getByTestId('draft')).toHaveTextContent(`"doctorId":"${doctorId}"`)
+
+    await writeNextCommand(user, 'confirmar cita')
+    await waitFor(() => expect(within(voiceStatus()).getByText(/primero prepara una propuesta completa/i)).toBeInTheDocument())
     expect(reserve).not.toHaveBeenCalled()
   })
 })

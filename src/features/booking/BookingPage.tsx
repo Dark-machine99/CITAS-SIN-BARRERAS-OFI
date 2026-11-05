@@ -57,13 +57,18 @@ function BookingPageContent({ directoryAdapter: liveDirectoryAdapter = patientDi
   const slots = usePatientAvailability(availabilityAdapter, draft, draftRef, updateDraft)
   const [dates] = useState(() => createFutureLimaDates(now))
   const initialVoiceReview = new URLSearchParams(location.search).get('voice') === 'review' && !firstMissingBookingField(draft)
-  const [step, setStep] = useState(() => initialVoiceReview ? (simple ? 2 : 5) : firstIncompleteBookingStep(draft, simple))
+  const [step, setStep] = useState(() => initialVoiceReview
+    ? (simple ? 2 : 5)
+    : firstMissingBookingField(draft)
+      ? firstIncompleteBookingStep(draft, simple)
+      : 0)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<PatientReservationData | null>(null)
   const activeSession = useRef(true)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const handledVoiceReviewKey = useRef<string | null>(initialVoiceReview ? location.key : null)
+  const voiceReviewActive = useRef(initialVoiceReview)
   const steps = simple ? ['Atención', 'Fecha y hora', 'Revisar y confirmar'] : ['Especialidad', 'Profesional', 'Fecha', 'Hora', 'Motivo', 'Resumen', 'Confirmación']
   const directoryData = directory.state.status === 'ready' ? directory.state.data : null
   const specialtyName = useCallback((id: string) => directoryData?.specialties.find((item) => item.id === id)?.name ?? 'Especialidad no disponible', [directoryData])
@@ -75,7 +80,14 @@ function BookingPageContent({ directoryAdapter: liveDirectoryAdapter = patientDi
   useEffect(() => () => { if (!practice) resetSensitive() }, [practice, resetSensitive])
   useEffect(() => {
     const requestsReview = new URLSearchParams(location.search).get('voice') === 'review'
-    if (!requestsReview || firstMissingBookingField(draft) || handledVoiceReviewKey.current === location.key) return
+    if (!requestsReview) {
+      if (!voiceReviewActive.current) return
+      voiceReviewActive.current = false
+      const timer = window.setTimeout(() => { setError(''); setStep(0) }, 0)
+      return () => window.clearTimeout(timer)
+    }
+    voiceReviewActive.current = true
+    if (firstMissingBookingField(draft) || handledVoiceReviewKey.current === location.key) return
     handledVoiceReviewKey.current = location.key
     const timer = window.setTimeout(() => { setError(''); setStep(simple ? 2 : 5) }, 0)
     return () => window.clearTimeout(timer)

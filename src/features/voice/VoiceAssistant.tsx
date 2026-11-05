@@ -1,9 +1,8 @@
 import { CircleStop, HelpCircle, Keyboard, Mic, MicOff, RotateCcw, Send, Volume2, X } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { useAccessibility } from '../../app/providers/AccessibilityProvider'
 import { useBooking } from '../../app/providers/BookingProvider'
-import { useDemoSession } from '../../app/providers/DemoSessionProvider'
 import { Button } from '../../components/ui/Button'
 import type { PatientAvailabilityAdapter } from '../../services/supabase/patientAvailabilityAdapter'
 import type { PatientDirectoryAdapter } from '../../services/supabase/patientDirectoryAdapter'
@@ -35,8 +34,14 @@ export function VoiceAssistant({ directoryAdapter, availabilityAdapter, open: co
   const pendingVoiceConfirmation = useRef(false)
   const panelId = useId()
   const navigate = useNavigate()
+  const location = useLocation()
+  const previousLocation = useRef(`${location.pathname}${location.search}`)
   const { draft, updateDraft, confirm } = useBooking()
-  const { role } = useDemoSession()
+  const role = location.pathname.startsWith('/administracion')
+    ? 'admin'
+    : location.pathname.startsWith('/medico')
+      ? 'doctor'
+      : 'patient'
   const { update: updateAccessibility } = useAccessibility()
   const Recognition = useMemo(() => getSpeechRecognitionConstructor(), [])
 
@@ -85,8 +90,20 @@ export function VoiceAssistant({ directoryAdapter, availabilityAdapter, open: co
       return
     }
     setInput('')
-    if (intent.type === 'navigate') { navigate(intent.path); respond(command, `Abriendo ${intent.label}.`); return }
-    if (intent.type === 'booking') { navigate('/paciente/reservar'); respond(command, 'Abriendo Reservar para que elijas especialidad, profesional, fecha y hora.'); return }
+    if (intent.type === 'navigate') {
+      requestVersion.current += 1
+      pendingVoiceConfirmation.current = false
+      navigate(intent.path)
+      respond(command, `Abriendo ${intent.label}.`)
+      return
+    }
+    if (intent.type === 'booking') {
+      requestVersion.current += 1
+      pendingVoiceConfirmation.current = false
+      navigate('/paciente/reservar')
+      respond(command, 'Abriendo Reservar para que elijas especialidad, profesional, fecha y hora.')
+      return
+    }
     if (intent.type === 'accessibility') { updateAccessibility(intent.patch); respond(command, `${intent.label} ${Object.values(intent.patch)[0] === false ? 'desactivado' : 'activado'}.`); return }
     if (role === 'doctor' || role === 'admin') {
       if (intent.type === 'repeat') { speak(response); setStatus('responding'); return }
@@ -163,6 +180,15 @@ export function VoiceAssistant({ directoryAdapter, availabilityAdapter, open: co
   useEffect(() => {
     if (!open) stopRecognition()
   }, [open, stopRecognition])
+  useEffect(() => {
+    const currentLocation = `${location.pathname}${location.search}`
+    if (previousLocation.current === currentLocation) return
+    previousLocation.current = currentLocation
+    requestVersion.current += 1
+    const keepsVoiceReview = location.pathname === '/paciente/reservar'
+      && new URLSearchParams(location.search).get('voice') === 'review'
+    if (!keepsVoiceReview) pendingVoiceConfirmation.current = false
+  }, [location.pathname, location.search])
   useEffect(() => () => {
     requestVersion.current += 1
     pendingVoiceConfirmation.current = false
