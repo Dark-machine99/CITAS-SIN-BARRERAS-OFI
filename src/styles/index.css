@@ -270,7 +270,7 @@ p { color: var(--muted); }
 .sidebar > .button { color: #c9daeb; justify-content: flex-start; }
 .patient-main { min-width: 0; }
 .patient-topbar { height: 78px; padding: 0 34px; display: flex; align-items: center; gap: 16px; background: rgba(250,253,255,.86); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 25; }
-.patient-topbar > div { flex: 1; }
+.patient-topbar__identity { flex: 1; min-width: 0; }
 .patient-topbar .eyebrow, .patient-topbar strong { display: block; margin: 0; }
 .patient-topbar .eyebrow { font-size: .68rem; }
 .avatar { width: 42px; height: 42px; display: inline-grid; place-items: center; border-radius: 50%; background: linear-gradient(145deg, #d9ecff, #b6d7f6); color: #194a7e; font-weight: 700; flex: none; }
@@ -439,7 +439,7 @@ html[data-reduce-motion='on'] *, html[data-reduce-motion='on'] *::before, html[d
 }
 
 @media (max-width: 380px) {
-  .patient-topbar { padding: 0 12px; }.patient-topbar > div strong { font-size: .92rem; }.patient-topbar .avatar { width: 38px; height: 38px; }.bottom-nav { left: 4px; right: 4px; bottom: 4px; }.bottom-nav span { font-size: .66rem; }.hero .button { width: 100%; }.time-grid { grid-template-columns: 1fr; }.demo-banner { font-size: .84rem; }.booking-card { padding: 16px 10px; }
+  .patient-topbar { padding: 0 12px; }.patient-topbar__identity strong { font-size: .92rem; }.patient-topbar .avatar { width: 38px; height: 38px; }.bottom-nav { left: 4px; right: 4px; bottom: 4px; }.bottom-nav span { font-size: .66rem; }.hero .button { width: 100%; }.time-grid { grid-template-columns: 1fr; }.demo-banner { font-size: .84rem; }.booking-card { padding: 16px 10px; }
 }
 
 @media (max-width: 600px) {
@@ -489,7 +489,7 @@ html[data-contrast='high'] :where(.role-page-heading h1,.role-page-heading p,.ro
 html[data-contrast='high'] .responsive-table tbody tr:hover { background: #1d1d1d; }
 
 /* Tutorial Paciente: overlay informativo, sin capturar datos de producto. */
-.patient-topbar__actions { display: flex; align-items: center; gap: .65rem; margin-left: auto; }
+.patient-topbar__actions { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: .65rem; margin-left: auto; }
 .patient-tutorial-help { min-height: 2.75rem; gap: .5rem; white-space: nowrap; }
 .patient-tutorial-help svg { width: 1.2rem; height: 1.2rem; }
 .tutorial-prompt { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 1rem; overflow: auto; background: rgb(2 15 38 / .76); backdrop-filter: blur(10px); }
