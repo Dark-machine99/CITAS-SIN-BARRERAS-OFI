@@ -321,7 +321,7 @@ describe('límite de reserva del asistente global', () => {
     expect(cloud.directoryAdapter.load).not.toHaveBeenCalled()
   })
 
-  it('mantiene la propuesta incompleta ante ambigüedad y no reserva', async () => {
+  it('mantiene la propuesta incompleta cuando el nombre coincide con varios profesionales y no reserva', async () => {
     const user = userEvent.setup()
     const cloud = adapters({
       ...directoryData,
@@ -333,9 +333,9 @@ describe('límite de reserva del asistente global', () => {
     const reserve = vi.fn()
     renderAssistant({ ...cloud, reservationAdapter: { reserve } })
 
-    await openAndWrite(user, 'reservar cita mañana de cardiología a las nueve y treinta')
+    await openAndWrite(user, 'reservar cita mañana de cardiología con Lucía a las nueve y treinta')
 
-    await waitFor(() => expect(within(voiceStatus()).getByText(/elige un profesional de cardiología/i)).toBeInTheDocument())
+    await waitFor(() => expect(within(voiceStatus()).getByText(/encontré varios profesionales con ese nombre/i)).toBeInTheDocument())
     expect(within(voiceStatus()).getByText(/lucía torres.*lucía torres vega/i)).toBeInTheDocument()
     expect(screen.getByTestId('draft')).toHaveTextContent(`"specialtyId":"${specialtyId}"`)
     expect(screen.getByTestId('draft')).toHaveTextContent('"doctorId":null')

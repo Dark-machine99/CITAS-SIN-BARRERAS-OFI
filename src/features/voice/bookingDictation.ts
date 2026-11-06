@@ -51,19 +51,54 @@ function findSpecialties(command: string, specialties: DirectorySpecialty[]) {
 }
 
 function findDoctors(command: string, doctors: DirectoryDoctor[]) {
-  return doctors.filter((doctor) => {
-    const name = normalizeVoiceText(doctor.name).replace(/\b(dra|dr|doctora|doctor)\b/g, '').trim()
-    return command.includes(name) || name.split(' ').some((part) => part.length > 4 && command.includes(part))
-  })
+  const normalized = doctors.map((doctor) => ({
+    doctor,
+    name: normalizeVoiceText(doctor.name).replace(/\b(dra|dr|doctora|doctor)\b/g, '').trim(),
+  }))
+  const fullMatches = normalized.filter(({ name }) => command.includes(name))
+  if (fullMatches.length) {
+    return fullMatches.filter((candidate) => !fullMatches.some((other) => other.name.length > candidate.name.length && other.name.includes(candidate.name)))
+      .map(({ doctor }) => doctor)
+  }
+  return normalized.filter(({ name }) => name.split(' ').some((part) => part.length > 4 && command.includes(part)))
+    .map(({ doctor }) => doctor)
 }
 
 function periodSlots(command: string, slots: AvailabilitySlot[]) {
-  if (/\b(?:por|en|de) la tarde\b|\bturno tarde\b/.test(command)) return slots.filter((slot) => slot.time >= '12:00:00')
-  if (/\b(?:por|en|de) la manana\b|\bturno manana\b/.test(command)) return slots.filter((slot) => slot.time < '12:00:00')
+  const period = requestedPeriod(command)
+  if (period === 'afternoon') return slots.filter((slot) => slot.time >= '12:00:00')
+  if (period === 'morning') return slots.filter((slot) => slot.time < '12:00:00')
   return slots
 }
 
+function requestedPeriod(command: string) {
+  if (/\b(?:por|en|de) la tarde\b|\bturno tarde\b/.test(command)) return 'afternoon' as const
+  if (/\b(?:por|en|de) la manana\b|\bturno manana\b/.test(command)) return 'morning' as const
+  return null
+}
+
 const timeOptions = (slots: AvailabilitySlot[]) => slots.slice(0, 4).map((slot) => `${slot.time.slice(0, 5)} (${slot.durationMinutes} minutos)`)
+
+interface DoctorSlot {
+  doctor: DirectoryDoctor
+  doctorOrder: number
+  slot: AvailabilitySlot
+}
+
+function orderedDoctorSlots(command: string, availability: { doctor: DirectoryDoctor; doctorOrder: number; slots: AvailabilitySlot[] }[]) {
+  return availability.flatMap(({ doctor, doctorOrder, slots }) => periodSlots(command, slots).map((slot) => ({ doctor, doctorOrder, slot })))
+    .toSorted((left, right) => left.slot.time.localeCompare(right.slot.time) || left.doctorOrder - right.doctorOrder)
+}
+
+function doctorTimeOptions(slots: DoctorSlot[]) {
+  const seen = new Set<string>()
+  return slots.flatMap(({ doctor, slot }) => {
+    const key = `${doctor.id}:${slot.time}`
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [`${doctor.name}: ${slot.time.slice(0, 5)} (${slot.durationMinutes} minutos)`]
+  }).slice(0, 4)
+}
 
 export function extractBookingReason(raw: string) {
   const match = raw.match(/\b(?:motivo(?: de consulta)?(?: es)?|porque|debido a|por)\s*[:,-]?\s*((?:dolor|molestia|control|revisi[oó]n|chequeo|ardor|fiebre|mareo|tos|malestar|lesi[oó]n|picaz[oó]n|visi[oó]n)[\s\S]+)/i)
@@ -100,20 +135,68 @@ export async function resolveBookingRequest(raw: string, current: AppointmentDra
   }
 
   const compatibleDoctors = directory.doctors.filter((doctor) => doctor.specialtyIds.includes(specialty.id))
-  const doctorMatches = findDoctors(command, compatibleDoctors)
+  const namedDoctors = findDoctors(command, directory.doctors)
   const currentDoctor = compatibleDoctors.find((item) => item.id === current.doctorId)
-  if (doctorMatches.length > 1) return {
+  if (namedDoctors.length > 1) return {
     status: 'clarification', draft: { ...baseDraft, specialtyId: specialty.id, doctorId: null, time: null },
-    message: `Encontré varios profesionales de ${specialty.name}. Indica uno para continuar.`, options: doctorMatches.slice(0, 4).map((item) => item.name),
+    message: 'Encontré varios profesionales con ese nombre. Indica el nombre completo para continuar.', options: namedDoctors.slice(0, 4).map((item) => item.name),
   }
-  const doctor = doctorMatches[0] ?? currentDoctor ?? (compatibleDoctors.length === 1 ? compatibleDoctors[0] : undefined)
-  if (!doctor) return {
+  const namedDoctor = namedDoctors[0]
+  if (namedDoctor && !namedDoctor.specialtyIds.includes(specialty.id)) return {
     status: 'clarification', draft: { ...baseDraft, specialtyId: specialty.id, doctorId: null, time: null },
-    message: compatibleDoctors.length ? `Elige un profesional de ${specialty.name}.` : `No hay profesionales disponibles para ${specialty.name}.`,
+    message: `${namedDoctor.name} no atiende ${specialty.name}. Elige un profesional compatible o cambia la especialidad.`,
     options: compatibleDoctors.slice(0, 4).map((item) => item.name),
   }
-
   const date = requestedDate(command, current, options.now ?? new Date())
+  const exactTime = parseRequestedTime(command)
+  const period = requestedPeriod(command)
+  const doctor = namedDoctor ?? currentDoctor ?? (compatibleDoctors.length === 1 ? compatibleDoctors[0] : undefined)
+  if (!doctor && !compatibleDoctors.length) return {
+    status: 'clarification', draft: { ...baseDraft, specialtyId: specialty.id, doctorId: null, time: null },
+    message: `No hay profesionales disponibles para ${specialty.name}.`, options: [],
+  }
+  if (!doctor && (exactTime || period)) {
+    const partialDraft: AppointmentDraft = { specialtyId: specialty.id, doctorId: null, date: date.date, time: null, reason }
+    let availability
+    try {
+      availability = await Promise.all(compatibleDoctors.map(async (candidate, doctorOrder) => ({
+        doctor: candidate,
+        doctorOrder,
+        slots: (await availabilityAdapter.load({ doctorId: candidate.id, specialtyId: specialty.id, date: date.date })).slots,
+      })))
+    } catch {
+      return { status: 'error', draft: partialDraft, message: 'No pudimos consultar los horarios. Inténtalo nuevamente.' }
+    }
+
+    const allSlots = orderedDoctorSlots('', availability)
+    if (exactTime) {
+      const exactCandidate = allSlots.find(({ slot }) => slot.time === exactTime)
+      if (exactCandidate) return proposal(specialty, exactCandidate.doctor, date, exactCandidate.slot, reason, 'Elegí el profesional según el orden estable del directorio entre quienes tenían disponible la hora solicitada.')
+      return {
+        status: 'clarification', draft: partialDraft,
+        message: `La hora ${exactTime.slice(0, 5)} no está disponible con los profesionales de ${specialty.name}. Elige una opción real.`,
+        options: doctorTimeOptions(allSlots),
+      }
+    }
+
+    const candidates = orderedDoctorSlots(command, availability)
+    const selected = candidates[0]
+    if (!selected) {
+      const periodName = period === 'afternoon' ? 'la tarde' : 'la mañana'
+      return {
+        status: 'no-slots', draft: partialDraft,
+        message: `No hay horarios disponibles por ${periodName} el ${date.date}. Elige otra fecha u horario.`,
+        options: doctorTimeOptions(allSlots),
+      }
+    }
+    const periodName = period === 'afternoon' ? 'la tarde' : 'la mañana'
+    return proposal(specialty, selected.doctor, date, selected.slot, reason, `Seleccioné el horario más temprano de ${periodName}; en empates respeté el orden estable del directorio.`)
+  }
+  if (!doctor) return {
+    status: 'clarification', draft: { ...baseDraft, specialtyId: specialty.id, doctorId: null, time: null },
+    message: `Elige un profesional de ${specialty.name}.`, options: compatibleDoctors.slice(0, 4).map((item) => item.name),
+  }
+
   const partialDraft: AppointmentDraft = { specialtyId: specialty.id, doctorId: doctor.id, date: date.date, time: null, reason }
   let availability
   try { availability = await availabilityAdapter.load({ doctorId: doctor.id, specialtyId: specialty.id, date: date.date }) }
@@ -123,7 +206,6 @@ export async function resolveBookingRequest(raw: string, current: AppointmentDra
     message: `${doctor.name} no tiene horarios disponibles el ${date.date}. Indica otra fecha.`, options: [],
   }
 
-  const exactTime = parseRequestedTime(command)
   if (exactTime) {
     const exactSlot = availability.slots.find((slot) => slot.time === exactTime)
     if (!exactSlot) return {
@@ -146,7 +228,7 @@ export async function resolveBookingRequest(raw: string, current: AppointmentDra
   return proposal(specialty, doctor, date, candidates[0]!, reason)
 }
 
-function proposal(specialty: DirectorySpecialty, doctor: DirectoryDoctor, date: { date: string; inferred: boolean }, slot: AvailabilitySlot, reason: string): BookingResolution {
+function proposal(specialty: DirectorySpecialty, doctor: DirectoryDoctor, date: { date: string; inferred: boolean }, slot: AvailabilitySlot, reason: string, automaticDecision?: string): BookingResolution {
   const draft: AppointmentDraft = { specialtyId: specialty.id, doctorId: doctor.id, date: date.date, time: slot.time, reason }
   return { status: 'proposal', proposal: {
     draft,
@@ -155,6 +237,7 @@ function proposal(specialty: DirectorySpecialty, doctor: DirectoryDoctor, date: 
       `Especialidad: ${specialty.name}.`, `Profesional: ${doctor.name}.`,
       date.inferred ? `Propuse la próxima fecha: ${date.date}.` : `Fecha solicitada: ${date.date}.`,
       `Horario disponible confirmado: ${slot.time.slice(0, 5)} (${slot.durationMinutes} minutos).`,
+      ...(automaticDecision ? [automaticDecision] : []),
       reason ? 'Incluí el motivo indicado.' : 'No se indicó un motivo opcional.',
     ],
   } }
