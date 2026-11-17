@@ -9,16 +9,17 @@ interface ModalProps {
   descriptionId?: string
   initialFocusRef?: RefObject<HTMLElement | null>
   returnFocusRef?: RefObject<HTMLElement | null>
+  resolveReturnFocus?: () => HTMLElement | null
 }
 
-export function Modal({ open, title, onClose, descriptionId, initialFocusRef, returnFocusRef, children }: PropsWithChildren<ModalProps>) {
+export function Modal({ open, title, onClose, descriptionId, initialFocusRef, returnFocusRef, resolveReturnFocus, children }: PropsWithChildren<ModalProps>) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
   useEffect(() => {
     if (!open) return
     const dialog = dialogRef.current
     const previous = document.activeElement as HTMLElement | null
-    const returnElement = returnFocusRef?.current
+    const initialReturnElement = returnFocusRef?.current
     const initialFocus = initialFocusRef?.current ?? dialog?.querySelector<HTMLElement>('button, input, [href]')
     initialFocus?.focus()
     const onKey = (event: KeyboardEvent) => {
@@ -32,8 +33,13 @@ export function Modal({ open, title, onClose, descriptionId, initialFocusRef, re
       }
     }
     document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('keydown', onKey); (returnElement ?? previous)?.focus() }
-  }, [initialFocusRef, onClose, open, returnFocusRef])
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      const returnElement = resolveReturnFocus?.() ?? initialReturnElement
+      if (returnElement?.isConnected) returnElement.focus()
+      else if (previous?.isConnected) previous.focus()
+    }
+  }, [initialFocusRef, onClose, open, resolveReturnFocus, returnFocusRef])
   if (!open) return null
   return <div className="modal-backdrop"><button type="button" className="modal-dismiss" onClick={onClose} aria-label="Cerrar diálogo" />
     <div ref={dialogRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>

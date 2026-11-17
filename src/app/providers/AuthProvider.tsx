@@ -16,6 +16,7 @@ interface AuthContextValue {
   signOut: () => Promise<void>
   requestPasswordReset: (email: string) => Promise<void>
   updatePassword: (password: string) => Promise<void>
+  reloadAccount: () => Promise<PatientProfile>
   updateProfile: (update: PatientProfileUpdate) => Promise<void>
   updateStoredPreferences: (update: AccessibilityPreferencesUpdate) => Promise<void>
 }
@@ -43,14 +44,14 @@ export function AuthProvider({ children, adapter = patientAccountAdapter }: Prop
     setStatus('signed-out')
   }, [])
 
-  const hydrate = useCallback((nextSession: Session | null) => {
+  const hydrate = useCallback((nextSession: Session | null, force = false) => {
     if (!nextSession) { clear(); return Promise.resolve(null) }
-    if (hydratedAccount.current?.profile.id === nextSession.user.id) {
+    if (!force && hydratedAccount.current?.profile.id === nextSession.user.id) {
       setSession(nextSession); setAccount(hydratedAccount.current); setError(null); setStatus('authenticated')
       return Promise.resolve(hydratedAccount.current)
     }
     const current = hydration.current
-    if (current?.userId === nextSession.user.id) return current.promise
+    if (!force && current?.userId === nextSession.user.id) return current.promise
 
     const version = ++loadVersion.current
     setStatus('loading'); setSession(nextSession); setError(null)
@@ -106,6 +107,13 @@ export function AuthProvider({ children, adapter = patientAccountAdapter }: Prop
   }, [adapter, clear])
   const requestPasswordReset = useCallback((email: string) => adapter.requestPasswordReset(email, `${window.location.origin}/nueva-contrasena`), [adapter])
   const updatePassword = useCallback((password: string) => adapter.updatePassword(password), [adapter])
+  const reloadAccount = useCallback(async () => {
+    const nextSession = session ?? await adapter.getSession()
+    if (!nextSession) { clear(); throw new Error('Debes iniciar sesión para volver a cargar tu cuenta.') }
+    const nextAccount = await hydrate(nextSession, true)
+    if (!nextAccount) throw new Error('No pudimos verificar tu perfil actualizado. Inténtalo nuevamente.')
+    return nextAccount.profile
+  }, [adapter, clear, hydrate, session])
   const updateProfile = useCallback(async (update: PatientProfileUpdate) => {
     if (!session) throw new Error('Debes iniciar sesión para actualizar el perfil.')
     const profile = await adapter.updateProfile(session.user.id, update)
@@ -127,8 +135,8 @@ export function AuthProvider({ children, adapter = patientAccountAdapter }: Prop
 
   const value = useMemo<AuthContextValue>(() => ({
     status, session, profile: account?.profile ?? null, storedPreferences: account?.preferences ?? null, error,
-    signUp, signIn, signOut, requestPasswordReset, updatePassword, updateProfile, updateStoredPreferences,
-  }), [account, error, requestPasswordReset, signIn, signOut, signUp, status, session, updatePassword, updateProfile, updateStoredPreferences])
+    signUp, signIn, signOut, requestPasswordReset, updatePassword, reloadAccount, updateProfile, updateStoredPreferences,
+  }), [account, error, reloadAccount, requestPasswordReset, signIn, signOut, signUp, status, session, updatePassword, updateProfile, updateStoredPreferences])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

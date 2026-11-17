@@ -27,4 +27,9 @@ describe('rutas principales', () => {
     renderRoute(route)
     expect(await screen.findByRole('heading', { level: 1, name: /entra a tu espacio personal/i })).toBeInTheDocument()
   })
+
+  it.each(['/medico', '/medico/cambiar-contrasena', '/medico/citas/demo-1', '/medico/accesibilidad'])('protege %s sin sesión real', async (route) => {
+    renderRoute(route)
+    expect(await screen.findByRole('heading', { level: 1, name: /entra a tu espacio personal/i })).toBeInTheDocument()
+  })
 })

@@ -7,6 +7,7 @@ import { AccessibilityPage } from '../features/accessibility/AccessibilityPage'
 import { AppointmentDetailPage, AppointmentsPage } from '../features/appointments/AppointmentsPages'
 import { AuthPage, ConfirmEmailPage } from '../features/auth/AuthPages'
 import { DemoRoleAccessPage } from '../features/auth/DemoRoleAccessPage'
+import { DoctorFirstAccessBoundary, RequireDoctor } from '../features/auth/RequireDoctor'
 import { RequirePatient } from '../features/auth/RequirePatient'
 import { BookingPage } from '../features/booking/BookingPage'
 import { DashboardPage } from '../features/patient/DashboardPage'
@@ -18,7 +19,7 @@ import { PrivacyPage } from '../features/public/PrivacyPage'
 import { ForbiddenPage, NotFoundPage } from '../features/public/SystemPages'
 
 export function App() {
-  return <Routes>
+  return <DoctorFirstAccessBoundary><Routes>
     <Route element={<PublicLayout />}>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<AuthPage kind="login" />} />
@@ -32,10 +33,13 @@ export function App() {
       <Route path="/acceso-denegado" element={<ForbiddenPage />} />
       <Route path="/acceso-demo" element={<DemoRoleAccessPage />} />
     </Route>
-    <Route path="/medico" element={<RoleLayout appRole="doctor" />}>
-      <Route index element={<DoctorAgendaPage />} />
-      <Route path="cambiar-contrasena" element={<DoctorPasswordPage />} />
-      <Route path="citas/:id" element={<DoctorAppointmentDetailPage />} />
+    <Route element={<RequireDoctor />}>
+      <Route path="/medico/cambiar-contrasena" element={<DoctorPasswordPage />} />
+      <Route path="/medico" element={<RoleLayout appRole="doctor" />}>
+        <Route index element={<DoctorAgendaPage />} />
+        <Route path="citas/:id" element={<DoctorAppointmentDetailPage />} />
+        <Route path="accesibilidad" element={<AccessibilityPage authenticated />} />
+      </Route>
     </Route>
     <Route path="/administracion" element={<RoleLayout appRole="admin" />}>
       <Route index element={<AdminDashboardPage />} />
@@ -58,5 +62,5 @@ export function App() {
       </Route>
     </Route>
     <Route path="*" element={<PublicLayout />}><Route path="*" element={<NotFoundPage />} /></Route>
-  </Routes>
+  </Routes></DoctorFirstAccessBoundary>
 }

@@ -66,10 +66,10 @@ describe('Accesibilidad autenticada del Paciente', () => {
     expect(screen.queryByRole('link', { name: /Ingresar/i })).not.toBeInTheDocument()
   })
 
-  it('conserva la ruta pública fuera del shell autenticado', () => {
+  it('conserva la ruta pública fuera del shell autenticado tras verificar la sesión', async () => {
     renderApp('/accesibilidad')
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Accesibilidad' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Accesibilidad' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Ingresar/i })).toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: 'Navegación del paciente' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Piloto en construcción/i)).not.toBeInTheDocument()

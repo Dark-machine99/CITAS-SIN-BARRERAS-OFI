@@ -12,13 +12,11 @@ function renderApp() {
 }
 
 describe('acceso por roles demo', () => {
-  it('obliga al médico a completar el primer acceso antes de ver agenda', async () => {
+  it('envía al médico al ingreso real sin conceder autorización demo', async () => {
     const user = userEvent.setup(); renderApp()
-    await user.click(screen.getByRole('button', { name: /entrar como médico/i }))
-    expect(await screen.findByRole('heading', { name: /crea una contraseña temporal/i })).toBeInTheDocument()
-    await user.type(screen.getByLabelText('Nueva contraseña de demostración', { exact: true }), 'Demostracion-2026')
-    await user.click(screen.getByRole('button', { name: /continuar a mi agenda/i }))
-    expect(await screen.findByRole('heading', { name: /tu jornada, en orden/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /ir al ingreso de médico/i }))
+    expect(await screen.findByRole('heading', { name: /entra a tu espacio personal/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /crea tu nueva contraseña/i })).not.toBeInTheDocument()
   })
 
   it('abre el resumen de administración con señalización demo', async () => {

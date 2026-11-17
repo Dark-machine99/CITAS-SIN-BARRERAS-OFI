@@ -465,6 +465,10 @@ export type Database = {
         }
         Returns: Json
       }
+      set_doctor_appointment_outcome: {
+        Args: { p_appointment_id: string; p_outcome: string }
+        Returns: Json
+      }
     }
     Enums: {
       appointment_status:
